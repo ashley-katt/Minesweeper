@@ -32,9 +32,13 @@ impl<const WIDTH: usize, const HEIGHT: usize> Board<WIDTH, HEIGHT> {
         match self.board_data[x][y] {
             Tile::Mine => true,
             Tile::Safe => {
-                for (xs, xy) in self.get_adjacent(x, y) {
-                    
+                let mut s = 0;
+                for (xs, ys) in self.get_adjacent(x, y) {
+                    if let Tile::Mine | Tile::FlaggedMine = self.board_data[xs][ys] {
+                        s += 1;
+                    }
                 }
+                self.board_data[x][y] = Tile::Revealed(s);
                 false
             }
             _ => false
@@ -49,17 +53,25 @@ impl<const WIDTH: usize, const HEIGHT: usize> Board<WIDTH, HEIGHT> {
             _ => return
         }
     }
-    fn get_adjacent(&self, x: usize, y: usize) -> &mut dyn Iterator<Item = (usize, usize)> {
-       &mut [(1isize,0isize),(-1,0),(0,1),(0,-1),(1,1),(1,-1),(-1,1),(-1,-1)].iter()
-        .map(|(xs, ys)| (x+*xs as usize, y+*ys as usize))
-        .filter(|(xs, xy)| *xs>=0 && *xy>=0 && *xs<WIDTH && *xy<HEIGHT)
+    fn get_adjacent(&self, x: usize, y: usize) -> Box<dyn Iterator<Item = (usize, usize)>> {
+        let v: Vec<(usize, usize)> = [(1isize,0isize),(-1,0),(0,1),(0,-1),(1,1),(1,-1),(-1,1),(-1,-1)]
+        .into_iter().filter_map(|(xs, ys)| {
+            let xs = xs.checked_add(x.try_into().ok()?)? as usize;
+            let ys = ys.checked_add(y.try_into().ok()?)? as usize;
+            if xs < WIDTH && ys < HEIGHT {
+                Some((xs, ys))
+            } else {
+                None
+            }
+        }).collect();
+        Box::new(v.into_iter())
     }
 }
 impl<const W: usize, const H: usize> fmt::Display for Board<W, H> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "     ")?;
         for x in 0..W {
-            write!(f, "{:<2} ", x)?;
+            write!(f, "{:<2} ", x+1)?;
         }
         writeln!(f, "")?;
         write!(f, "   +")?;
@@ -111,37 +123,51 @@ impl Tile {
 
 fn main() {
     let mut board: Board<15,13> = Board::new(40);
-    println!("{}", board);
-    println!();
-    println!("Enter Command: ");
-    println!("- Flag (x) (y)");
-    println!("- Reveal (x) (y)");
-    let mut input = String::new();
-    if let Err(_) = io::stdin().read_line(&mut input) {
-        eprintln!("Failed to read input!");
-        return;
-    }
-    let sp = input.split(" ")
-    match sp.next() {
-        Some("flag") | Some("f") => {
-
+    while !board.is_solved() {
+        println!("{}", board);
+        println!();
+        println!("Enter Command: ");
+        println!("- Flag (x) (y)");
+        println!("- Reveal (x) (y)");
+        let mut input = String::new();
+        if let Err(_) = io::stdin().read_line(&mut input) {
+            eprintln!("Failed to read input!");
+            return;
         }
-        Some("reveal") | Some("r") => {
-            if let Some(xs) = sp.next() {
-                if let Some(ys) = sp.next() {
-                    if let Some(x) = xs.parse() {
-                        if let Some(y) = ys.parse() {
-                            board.reveal(x, y);
+        let mut sp = input.split(" ");
+        match sp.next() {
+            Some("flag") | Some("f") => {
+                if let Some(xs) = sp.next() {
+                    if let Some(ys) = sp.next() {
+                        if let Ok(x) = xs.trim().parse::<usize>() {
+                            if let Ok(y) = ys.trim().parse::<usize>() {
+                                board.flag(x-1usize, y-1usize);
+                                continue;
+                            }
                         }
                     }
                 }
+                println!("Malformed command.");
             }
-        }
-        Some(_) => {
-            println!("Unrecognized command.");
-        }
-        _ => {
-            println!("Please input a command.");
+            Some("reveal") | Some("r") => {
+                if let Some(xs) = sp.next() {
+                    if let Some(ys) = sp.next() {
+                        if let Ok(x) = xs.trim().parse::<usize>() {
+                            if let Ok(y) = ys.trim().parse::<usize>() {
+                                board.reveal(x-1usize, y-1usize);
+                                continue;
+                            }
+                        }
+                    }
+                }
+                println!("Malformed command.");
+            }
+            Some(_) => {
+                println!("Unrecognized command.");
+            }
+            _ => {
+                println!("Please input a command.");
+            }
         }
     }
 }
